@@ -1,30 +1,26 @@
 #include <Arduino.h>
 
-#define led_pin 2
-#define ldr_pin 34
+//mutex
+SemaphoreHandle_t mutexSerial;
 
-//controlador da fila
-QueueHandle_t filaLuminosidade;
-
-//funções
-void TaskLeituraLDR(void *pv);
-void ControleLED(void *pv);
+void TaskPlacaA(void *pv);
+void TaskPlacaB(void *pv);
 
 
 void setup() {
   Serial.begin(115200);
 
-  // criação da fila
-  filaLuminosidade = xQueueCreate(5,sizeof(int));
-  if(filaLuminosidade == NULL){
-    Serial.println("Erro ao criar fila");
+  //config do mutex
+  mutexSerial = xSemaphoreCreateMutex();
+  if(mutexSerial == NULL){
+    Serial.println("Erro ao criar mutex");
     return;
   }
 
-  // criação das tasks
+  //config das tasks
   xTaskCreate(
-    TaskLeituraLDR,
-    "LerLDR",
+    TaskPlacaA,
+    "Placa A",
     2048,
     NULL,
     1,
@@ -32,50 +28,43 @@ void setup() {
   );
 
   xTaskCreate(
-    ControleLED,
-    "controleLED",
+    TaskPlacaB,
+    "Placa B",
     2048,
     NULL,
     1,
     NULL
-  );  
+  );
 }
 
 void loop(){}
 
-void TaskLeituraLDR(void *pv){
-  pinMode(ldr_pin,INPUT);
-
+void TaskPlacaA(void *pv){
   while (1)
   {
-    int leituraLDR = analogRead(ldr_pin);
+    /* code */
+    if(xSemaphoreTake(mutexSerial, portMAX_DELAY)==pdTRUE){
+      Serial.print("[Tarefa A] Iniciando envio... ");
+      vTaskDelay(100/portTICK_PERIOD_MS);
+      Serial.println("Finalizado com sucesso ! esp32 Liberado !");
 
-    //fila para mandar os dados 
-    xQueueSend(filaLuminosidade, &leituraLDR, 10/portTICK_PERIOD_MS);
-
-    vTaskDelay(200/portTICK_PERIOD_MS);
+      xSemaphoreGive(mutexSerial);
+    }
+    vTaskDelay(500/portTICK_PERIOD_MS);
   }  
 }
 
-void ControleLED(void *pv){
-  pinMode(led_pin, OUTPUT);
-  int valorRecebido;
-
+void TaskPlacaB(void *pv){
   while (1)
   {
-    if(xQueueReceive(filaLuminosidade, &valorRecebido, portMAX_DELAY) == pdPASS){
-      Serial.print("Valor do LDR: ");
-      Serial.print(valorRecebido);
-      
-      if(valorRecebido > 1500){
-        digitalWrite(led_pin,HIGH);
-        Serial.println("Ligando led.");
-      }
-      else{
-        digitalWrite(led_pin, LOW);
-        Serial.println("Ta claro já, desliga o LED !");
-      }
-      Serial.println("-----------------------");
+    /* code */
+    if(xSemaphoreTake(mutexSerial, portMAX_DELAY)==pdTRUE){
+      Serial.print("{Tarefa B} Coletando Dados Fictício... ");
+      Serial.println("Coelta concluída sem erros.");
+
+      xSemaphoreGive(mutexSerial);
     }
+
+    vTaskDelay(500/portTICK_PERIOD_MS);
   }  
 }

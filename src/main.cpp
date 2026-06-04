@@ -1,70 +1,51 @@
 #include <Arduino.h>
 
-//mutex
-SemaphoreHandle_t mutexSerial;
-
-void TaskPlacaA(void *pv);
-void TaskPlacaB(void *pv);
-
+void Task0(void *pv);
+void Task1(void *pv);
 
 void setup() {
   Serial.begin(115200);
 
-  //config do mutex
-  mutexSerial = xSemaphoreCreateMutex();
-  if(mutexSerial == NULL){
-    Serial.println("Erro ao criar mutex");
-    return;
-  }
-
-  //config das tasks
-  xTaskCreate(
-    TaskPlacaA,
-    "Placa A",
+  xTaskCreatePinnedToCore(
+    Task0,
+    "task0",
     2048,
     NULL,
     1,
-    NULL
+    NULL,
+    0
   );
 
-  xTaskCreate(
-    TaskPlacaB,
-    "Placa B",
+  xTaskCreatePinnedToCore(
+    Task1,
+    "task1",
     2048,
     NULL,
     1,
-    NULL
+    NULL,
+    1
   );
 }
 
 void loop(){}
 
-void TaskPlacaA(void *pv){
+void Task0 (void *pv){
   while (1)
   {
     /* code */
-    if(xSemaphoreTake(mutexSerial, portMAX_DELAY)==pdTRUE){
-      Serial.print("[Tarefa A] Iniciando envio... ");
-      vTaskDelay(100/portTICK_PERIOD_MS);
-      Serial.println("Finalizado com sucesso ! esp32 Liberado !");
-
-      xSemaphoreGive(mutexSerial);
-    }
-    vTaskDelay(500/portTICK_PERIOD_MS);
+    Serial.print("[TASK 0] - Olá! estourodando no Core: ");
+    Serial.println(xPortGetCoreID());
+    vTaskDelay(1000/portTICK_PERIOD_MS);
   }  
 }
 
-void TaskPlacaB(void *pv){
+void Task1(void *pv){
   while (1)
   {
     /* code */
-    if(xSemaphoreTake(mutexSerial, portMAX_DELAY)==pdTRUE){
-      Serial.print("{Tarefa B} Coletando Dados Fictício... ");
-      Serial.println("Coelta concluída sem erros.");
+    Serial.print("[TASK 1] - Olá! Estou rodando no Core: ");
+    Serial.println(xPortGetCoreID());
 
-      xSemaphoreGive(mutexSerial);
-    }
-
-    vTaskDelay(500/portTICK_PERIOD_MS);
+    vTaskDelay(1000/portTICK_PERIOD_MS);
   }  
 }

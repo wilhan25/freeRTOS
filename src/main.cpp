@@ -1,51 +1,46 @@
 #include <Arduino.h>
 
-void Task0(void *pv);
-void Task1(void *pv);
+#define btn_pin 18
+#define led_pin 2
+
+TaskHandle_t xTaskSireneBombeiros = NULL;
+
+void IRAM_ATTR isr_atendente(){
+  BaseType_t xTarefaMaisImportanteAcordou = pdFALSE;
+
+  vTaskNotifyGiveFromISR(xTaskSireneBombeiros, &xTarefaMaisImportanteAcordou);
+  if(xTarefaMaisImportanteAcordou == pdTRUE){
+    portYIELD_FROM_ISR();
+  }
+}
+
+void TaskBombeiro(void *pv){
+  pinMode(btn_pin, INPUT_PULLUP);
+  pinMode(led_pin, OUTPUT);
+
+  attachInterrupt(digitalPinToInterrupt(btn_pin), isr_atendente, FALLING);
+
+  int cliques = 0;
+  while (1)
+  {
+    /* code */
+    ulTaskNotifyTake(pdTRUE,portMAX_DELAY);
+    cliques++;
+    digitalWrite(led_pin, !digitalRead(led_pin));
+    Serial.print("[BOMBEIRO] Atendi o chamado! clique número: ");
+    Serial.println(cliques);
+    vTaskDelay(250/portTICK_PERIOD_MS);
+    ulTaskNotifyTake(pdTRUE,0);
+    Serial.println("[BOMBEIRO] Voltei pro quartel esperando o clique .... \n");
+  }  
+}
 
 void setup() {
   Serial.begin(115200);
 
-  xTaskCreatePinnedToCore(
-    Task0,
-    "task0",
-    2048,
-    NULL,
-    1,
-    NULL,
-    0
-  );
-
-  xTaskCreatePinnedToCore(
-    Task1,
-    "task1",
-    2048,
-    NULL,
-    1,
-    NULL,
-    1
-  );
+  xTaskCreate(TaskBombeiro, "bombeiro", 2048,NULL,3,&xTaskSireneBombeiros);
 }
 
-void loop(){}
-
-void Task0 (void *pv){
-  while (1)
-  {
-    /* code */
-    Serial.print("[TASK 0] - Olá! estourodando no Core: ");
-    Serial.println(xPortGetCoreID());
-    vTaskDelay(1000/portTICK_PERIOD_MS);
-  }  
-}
-
-void Task1(void *pv){
-  while (1)
-  {
-    /* code */
-    Serial.print("[TASK 1] - Olá! Estou rodando no Core: ");
-    Serial.println(xPortGetCoreID());
-
-    vTaskDelay(1000/portTICK_PERIOD_MS);
-  }  
+void loop() {
+  // Vazio
 }

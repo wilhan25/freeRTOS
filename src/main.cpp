@@ -1,44 +1,70 @@
 #include <Arduino.h>
 
-#define btn_pin 18
-#define led_pin 2
+#define BIT_WIFI_OK   (1 << 0)
+#define BIT_SENSOR_OK (1 << 1)
 
-TaskHandle_t xTaskSireneBombeiros = NULL;
+EventGroupHandle_t xGrupoDeEventos = NULL;
 
-void IRAM_ATTR isr_atendente(){
-  BaseType_t xTarefaMaisImportanteAcordou = pdFALSE;
+void TaskConectaWifi(void *pv){
+  Serial.println("[WI-FI] Iniciando conexão...");
+  vTaskDelay(3000/portTICK_PERIOD_MS);
 
-  vTaskNotifyGiveFromISR(xTaskSireneBombeiros, &xTarefaMaisImportanteAcordou);
-  if(xTarefaMaisImportanteAcordou == pdTRUE){
-    portYIELD_FROM_ISR();
-  }
+  Serial.println("[WI-FI] Conectado com Sucesso! Ligando flag de WIFI_OK...");
+  xEventGroupSetBits(xGrupoDeEventos, BIT_WIFI_OK);
+
+  vTaskDelete(NULL);
 }
 
-void TaskBombeiro(void *pv){
-  pinMode(btn_pin, INPUT_PULLUP);
-  pinMode(led_pin, OUTPUT);
+void TaskCalibraSensor(void *pv){
+  Serial.println("[SENSORES] Iniciando Calibração dos sensores...");
+  vTaskDelay(3000/portTICK_PERIOD_MS);
 
-  attachInterrupt(digitalPinToInterrupt(btn_pin), isr_atendente, FALLING);
+  Serial.println("[SENSORES] Calibragem Concluída! Ativando Flags de Sensor_OK...");
+  xEventGroupSetBits(xGrupoDeEventos, BIT_SENSOR_OK);
 
-  int cliques = 0;
+  vTaskDelete(NULL);
+}
+
+void taskMain(void *pv){
   while (1)
   {
-    /* code */
-    ulTaskNotifyTake(pdTRUE,portMAX_DELAY);
-    cliques++;
-    digitalWrite(led_pin, !digitalRead(led_pin));
-    Serial.print("[BOMBEIRO] Atendi o chamado! clique número: ");
-    Serial.println(cliques);
-    vTaskDelay(250/portTICK_PERIOD_MS);
-    ulTaskNotifyTake(pdTRUE,0);
-    Serial.println("[BOMBEIRO] Voltei pro quartel esperando o clique .... \n");
+    //checar se todos os sistemas estão OK (wifi e sensor)
+    Serial.println("[MESTRA] Aguardando WIFI e SENSOR ficarem prontos ...");
+
+    EventBits_t bitsResultantes = xEventGroupWaitBits(
+      xGrupoDeEventos,
+      BIT_WIFI_OK | BIT_SENSOR_OK,
+      pdTRUE,
+      pdTRUE,
+      portMAX_DELAY
+    );
+
+    Serial.println("\n==================================================");
+    Serial.println("[MESTRA] TODOS OS HARDWARES PRONTOS!");
+    Serial.printf("[MESTRA] Logs dos bits que acordaram a task: 0x%X\n", bitsResultantes);
+    Serial.println("[MESTRA] Executando loop de transmissão de dados na nuvem...");
+    Serial.println("==================================================\n");
+
+    vTaskDelay(2000 / portTICK_PERIOD_MS);
   }  
 }
 
 void setup() {
   Serial.begin(115200);
 
-  xTaskCreate(TaskBombeiro, "bombeiro", 2048,NULL,3,&xTaskSireneBombeiros);
+  vTaskDelay(5000/portTICK_PERIOD_MS);
+
+  xGrupoDeEventos = xEventGroupCreate();
+
+  if(xGrupoDeEventos != NULL){
+    xTaskCreate(TaskConectaWifi, "wifi", 2048, NULL,1,NULL);
+    xTaskCreate(TaskCalibraSensor,"sensor", 2048, NULL,1, NULL);
+
+    xTaskCreate(taskMain,"mestra", 2048, NULL, 2, NULL);
+  }
+  else{
+    Serial.println("Houve um erro ao criar o grupo de eventos!");
+  }
 }
 
 void loop() {
